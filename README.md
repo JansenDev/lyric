@@ -13,8 +13,7 @@ los descarga de [LRCLIB](https://lrclib.net) y puede reproducir la canción a la
 
 ## Instalación
 
-Necesitas Python 3.8 o superior. El instalador crea un entorno propio (con pygame para el audio)
-y deja el comando `lyric` disponible en cualquier consola, sin sudo ni permisos de administrador.
+Necesitas **Python 3.8 o superior**. Copia y pega en tu consola:
 
 **Linux, macOS y WSL**
 
@@ -28,8 +27,10 @@ curl -fsSL https://raw.githubusercontent.com/JansenDev/lyric/main/install.sh | s
 irm https://raw.githubusercontent.com/JansenDev/lyric/main/install.ps1 | iex
 ```
 
-También puedes clonar el repositorio y ejecutar `./install.sh` o
-`powershell -ExecutionPolicy Bypass -File install.ps1`. Para actualizar, vuelve a ejecutar el instalador.
+Después abre una consola nueva y prueba `lyric --help`.
+
+Guía completa (requisitos, instalación desde el código, actualizar, desinstalar y problemas frecuentes):
+**[INSTALL.md](INSTALL.md)**
 
 ## Uso
 
@@ -52,8 +53,3 @@ Si la letra no va a la par de la música, mientras suena:
 | `Ctrl+C` | Salir |
 
 Al terminar te indica el `--desfase` que puedes usar la próxima vez.
-
-## Desinstalar
-
-- Linux, macOS y WSL: `rm -rf ~/.local/share/lyric ~/.local/bin/lyric`
-- Windows: borra `%LOCALAPPDATA%\lyric` y `%USERPROFILE%\.local\bin\lyric.exe`
