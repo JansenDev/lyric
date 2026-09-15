@@ -10,6 +10,9 @@ Uso:
   python letras_sync.py ejemplo.lrc --inicio 30          (empezar en el segundo 30)
   python letras_sync.py --buscar "Artista" "Canción"      (descarga de LRCLIB)
   python letras_sync.py --buscar "Artista" "Canción" --guardar cancion.lrc
+  python letras_sync.py ejemplo.lrc --audio cancion.mp3   (reproduce la música a la vez)
+
+Para --audio hace falta pygame:  pip install pygame
 """
 import argparse
 import json
@@ -20,6 +23,12 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # sin el saludo de pygame
+try:
+    import pygame  # opcional: solo hace falta con --audio
+except ImportError:
+    pygame = None
 
 TIME_TAG = re.compile(r"\[(\d+):(\d+(?:\.\d+)?)\]")
 META_TAG = re.compile(r"^\[(ar|ti|al|by|offset|length):(.*)\]$", re.IGNORECASE)
@@ -89,17 +98,31 @@ def dibujar(lineas, actual, contexto=3):
     print("\n".join(salida), flush=True)
 
 
-def reproducir(lineas, modo="karaoke", inicio=0.0):
-    # Reloj de referencia: todas las esperas se calculan contra t0,
-    # así los pequeños retrasos de print/sleep NO se acumulan.
-    t0 = time.monotonic() - inicio
+def reloj_audio(musica, inicio):
+    """Reloj basado en la posición real del audio; devuelve None cuando termina."""
+    def ahora():
+        if not musica.get_busy():
+            return None
+        return inicio + musica.get_pos() / 1000  # get_pos no incluye el inicio
+    return ahora
+
+
+def reproducir(lineas, modo="karaoke", inicio=0.0, reloj=None):
+    if reloj is None:
+        # Reloj de referencia: todas las esperas se calculan contra t0,
+        # así los pequeños retrasos de print/sleep NO se acumulan.
+        t0 = time.monotonic() - inicio
+        reloj = lambda: time.monotonic() - t0
     primera = next((i for i, (t, _) in enumerate(lineas) if t >= inicio), len(lineas))
 
     for idx in range(primera, len(lineas)):
         t, letra = lineas[idx]
-        espera = t - (time.monotonic() - t0)
-        if espera > 0:
-            time.sleep(espera)
+        # Esperas cortas volviendo a consultar el reloj: con audio, el tiempo
+        # lo marca la canción y puede no ir exacto al reloj del sistema.
+        while (ahora := reloj()) is not None and ahora < t:
+            time.sleep(min(t - ahora, 0.05))
+        if ahora is None:
+            return  # el audio terminó antes que la letra
         if modo == "karaoke":
             dibujar(lineas, idx)
         else:
@@ -116,6 +139,7 @@ def main():
     p.add_argument("--guardar", help="guardar la letra descargada en este .lrc")
     p.add_argument("--modo", choices=["karaoke", "simple"], default="karaoke")
     p.add_argument("--inicio", type=float, default=0.0, help="segundo de inicio")
+    p.add_argument("--audio", help="archivo de audio (mp3, ogg, wav) para reproducir a la vez")
     args = p.parse_args()
 
     try:
@@ -138,16 +162,40 @@ def main():
     if not lineas:
         sys.exit("El archivo no tiene líneas con marcas de tiempo.")
 
+    musica = None
+    if args.audio:
+        if pygame is None:
+            sys.exit("Para reproducir audio instala pygame:  pip install pygame")
+        try:
+            pygame.mixer.init()
+            pygame.mixer.music.load(args.audio)
+        except (pygame.error, OSError) as e:
+            sys.exit(f"Error al cargar el audio: {e}")
+        musica = pygame.mixer.music
+
     titulo = f"{meta.get('ar', '?')} — {meta.get('ti', '?')}"
     print(f"{VERDE}♫ {titulo}{RESET}")
-    print("Empieza en 3 segundos... (Ctrl+C para salir)")
-    time.sleep(3)
+    if musica:
+        print("Reproduciendo... (Ctrl+C para salir)")
+    else:
+        # Margen para darle al play en el reproductor externo
+        print("Empieza en 3 segundos... (Ctrl+C para salir)")
+        time.sleep(3)
 
     try:
-        reproducir(lineas, args.modo, args.inicio)
+        reloj = None
+        if musica:
+            musica.play(start=args.inicio)
+            reloj = reloj_audio(musica, args.inicio)
+        reproducir(lineas, args.modo, args.inicio, reloj)
+        while musica and musica.get_busy():  # deja sonar el final de la canción
+            time.sleep(0.1)
         print(f"\n{VERDE}♫ Fin{RESET}")
     except KeyboardInterrupt:
         print(f"{RESET}\nDetenido.")
+    finally:
+        if musica:
+            pygame.mixer.quit()
 
 
 if __name__ == "__main__":
