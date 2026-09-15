@@ -11,6 +11,11 @@ Uso:
   python letras_sync.py --buscar "Artista" "Canción"      (descarga de LRCLIB)
   python letras_sync.py --buscar "Artista" "Canción" --guardar cancion.lrc
   python letras_sync.py ejemplo.lrc --audio cancion.mp3   (reproduce la música a la vez)
+  python letras_sync.py ejemplo.lrc --desfase 0.3         (la letra sale 0,3 s más tarde)
+
+Durante la canción:
+  Espacio   pulsar justo cuando empieza a cantar una línea: la letra se sincroniza ahí
+  ← / →     adelantar / retrasar la letra 0,1 s
 
 Para --audio hace falta pygame:  pip install pygame
   (en Ubuntu/WSL:  sudo apt install python3-pygame)
@@ -19,6 +24,7 @@ import argparse
 import json
 import os
 import re
+import select
 import sys
 import time
 import urllib.error
@@ -30,6 +36,8 @@ TIME_TAG = re.compile(r"\[(\d+):(\d+(?:\.\d+)?)\]")
 META_TAG = re.compile(r"^\[(ar|ti|al|by|offset|length):(.*)\]$", re.IGNORECASE)
 
 GRIS, BLANCO, VERDE, RESET = "\033[90m", "\033[1;97m", "\033[92m", "\033[0m"
+
+PASO = 0.1  # segundos que mueve cada pulsación de ← / →
 
 
 def parse_lrc(texto):
@@ -79,7 +87,7 @@ def fmt(seg):
     return f"{int(seg // 60):02d}:{seg % 60:05.2f}"
 
 
-def dibujar(lineas, actual, contexto=3):
+def dibujar(lineas, actual, contexto=3, pie=""):
     """Modo karaoke: redibuja la pantalla con la línea actual resaltada."""
     salida = ["\033[2J\033[H"]  # limpiar pantalla y mover cursor arriba
     for j in range(actual - contexto, actual + contexto + 1):
@@ -91,7 +99,51 @@ def dibujar(lineas, actual, contexto=3):
                 salida.append(f"    {GRIS}{texto}{RESET}")
         else:
             salida.append("")
+    if pie:
+        salida += ["", f"  {GRIS}{pie}{RESET}"]
     print("\n".join(salida), flush=True)
+
+
+class Teclado:
+    """Lee teclas al vuelo, sin bloquear ni esperar Enter (Windows, Linux y macOS)."""
+
+    def __enter__(self):
+        self.fd, self.antes = None, None
+        if os.name != "nt" and sys.stdin.isatty():
+            import termios
+            import tty
+            self.fd = sys.stdin.fileno()
+            self.antes = termios.tcgetattr(self.fd)
+            tty.setcbreak(self.fd)  # sin eco ni Enter; Ctrl+C sigue funcionando
+        return self
+
+    def __exit__(self, *_):
+        if self.antes:
+            import termios
+            termios.tcsetattr(self.fd, termios.TCSADRAIN, self.antes)
+
+    def leer(self):
+        """Teclas pulsadas desde la última lectura; las flechas llegan como '←' y '→'."""
+        if os.name == "nt":
+            import msvcrt
+            teclas = ""
+            while msvcrt.kbhit():
+                c = msvcrt.getwch()
+                if c in ("\x00", "\xe0"):  # tecla especial: llega en dos partes
+                    c = {"K": "←", "M": "→"}.get(msvcrt.getwch(), "")
+                teclas += c
+            return teclas
+        if self.fd is None or not select.select([self.fd], [], [], 0)[0]:
+            return ""
+        datos = os.read(self.fd, 64).decode(errors="ignore")
+        return datos.replace("\x1b[D", "←").replace("\x1b[C", "→")
+
+
+def sincronizar(lineas, ahora, desfase):
+    """Nuevo desfase para que la línea cantada más cercana empiece justo 'ahora'."""
+    cercana = min((t for t, letra in lineas if letra),
+                  key=lambda t: abs(ahora - (t + desfase)), default=None)
+    return desfase if cercana is None else round(ahora - cercana, 2)
 
 
 def reloj_audio(musica, inicio):
@@ -103,26 +155,50 @@ def reloj_audio(musica, inicio):
     return ahora
 
 
-def reproducir(lineas, modo="karaoke", inicio=0.0, reloj=None):
+def reproducir(lineas, modo="karaoke", inicio=0.0, reloj=None, desfase=0.0):
+    """Muestra cada línea cuando reloj() llega a su tiempo + desfase."""
     if reloj is None:
         # Reloj de referencia: todas las esperas se calculan contra t0,
         # así los pequeños retrasos de print/sleep NO se acumulan.
         t0 = time.monotonic() - inicio
         reloj = lambda: time.monotonic() - t0
-    primera = next((i for i, (t, _) in enumerate(lineas) if t >= inicio), len(lineas))
+    idx = next((i for i, (t, _) in enumerate(lineas) if t >= inicio), len(lineas))
+    desfase_inicial = desfase
 
-    for idx in range(primera, len(lineas)):
-        t, letra = lineas[idx]
-        # Esperas cortas volviendo a consultar el reloj: con audio, el tiempo
-        # lo marca la canción y puede no ir exacto al reloj del sistema.
-        while (ahora := reloj()) is not None and ahora < t:
-            time.sleep(min(t - ahora, 0.05))
-        if ahora is None:
-            return  # el audio terminó antes que la letra
-        if modo == "karaoke":
-            dibujar(lineas, idx)
-        else:
-            print(f"{GRIS}[{fmt(t)}]{RESET} {letra or '♪'}", flush=True)
+    try:
+        with Teclado() as teclado:
+            while idx < len(lineas):  # idx = siguiente línea por mostrar
+                ahora = reloj()
+                if ahora is None:
+                    break  # el audio terminó antes que la letra
+                antes = desfase
+                for tecla in teclado.leer():
+                    if tecla == " ":
+                        desfase = sincronizar(lineas, ahora, desfase)
+                    elif tecla in ("←", "→"):
+                        desfase = round(desfase + (PASO if tecla == "→" else -PASO), 2)
+                # Tras un ajuste pueden tocar varias líneas de golpe: se salta a la última
+                nuevo = idx
+                while nuevo < len(lineas) and lineas[nuevo][0] + desfase <= ahora:
+                    nuevo += 1
+                if modo == "karaoke":
+                    if nuevo > idx or desfase != antes:
+                        pie = f"[Espacio] al empezar a cantar · [←/→] ±{PASO} s · desfase {desfase:+.2f} s"
+                        dibujar(lineas, nuevo - 1, pie=pie)
+                else:
+                    if desfase != antes:
+                        print(f"{GRIS}  (desfase {desfase:+.2f} s){RESET}", flush=True)
+                    if nuevo > idx:
+                        t, letra = lineas[nuevo - 1]
+                        print(f"{GRIS}[{fmt(t)}]{RESET} {letra or '♪'}", flush=True)
+                idx = nuevo
+                if idx < len(lineas):
+                    # Esperas cortas volviendo a consultar el reloj y el teclado
+                    time.sleep(min(max(lineas[idx][0] + desfase - ahora, 0), 0.03))
+    finally:
+        if desfase != desfase_inicial:
+            print(f"\n{VERDE}Desfase ajustado: {desfase:+.2f} s{RESET}"
+                  f"  → la próxima vez usa  --desfase {desfase:g}", flush=True)
 
 
 def main():
@@ -136,6 +212,8 @@ def main():
     p.add_argument("--modo", choices=["karaoke", "simple"], default="karaoke")
     p.add_argument("--inicio", type=float, default=0.0, help="segundo de inicio")
     p.add_argument("--audio", help="archivo de audio (mp3, ogg, wav) para reproducir a la vez")
+    p.add_argument("--desfase", type=float, default=0.0,
+                   help="segundos que se retrasa la letra (negativo = sale antes)")
     args = p.parse_args()
 
     try:
@@ -179,6 +257,8 @@ def main():
     titulo = f"{meta.get('ar', '?')} — {meta.get('ti', '?')}"
     print(f"{VERDE}♫ {titulo}{RESET}")
     print("Empieza en 3 segundos... (Ctrl+C para salir)")
+    print(f"{GRIS}Si se desincroniza: [Espacio] justo cuando empiece a cantar una línea, "
+          f"[←/→] para afinar{RESET}")
     time.sleep(3)
 
     try:
@@ -186,7 +266,7 @@ def main():
         if musica:
             musica.play(start=args.inicio)
             reloj = reloj_audio(musica, args.inicio)
-        reproducir(lineas, args.modo, args.inicio, reloj)
+        reproducir(lineas, args.modo, args.inicio, reloj, args.desfase)
         while musica and musica.get_busy():  # deja sonar el final de la canción
             time.sleep(0.1)
         print(f"\n{VERDE}♫ Fin{RESET}")
