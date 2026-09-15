@@ -4,14 +4,14 @@ Letras sincronizadas en consola (estilo Spotify).
 
 Lee letras en formato LRC:   [mm:ss.xx] texto de la línea
 
-Uso:
-  python letras_sync.py ejemplo.lrc
-  python letras_sync.py ejemplo.lrc --modo simple
-  python letras_sync.py ejemplo.lrc --inicio 30          (empezar en el segundo 30)
-  python letras_sync.py --buscar "Artista" "Canción"      (descarga de LRCLIB)
-  python letras_sync.py --buscar "Artista" "Canción" --guardar cancion.lrc
-  python letras_sync.py ejemplo.lrc --audio cancion.mp3   (reproduce la música a la vez)
-  python letras_sync.py ejemplo.lrc --desfase 0.3         (la letra sale 0,3 s más tarde)
+Uso (tras instalar con install.sh / install.ps1; sin instalar: python letras_sync.py ...):
+  lyric ejemplo.lrc
+  lyric ejemplo.lrc --modo simple
+  lyric ejemplo.lrc --inicio 30          (empezar en el segundo 30)
+  lyric --buscar "Artista" "Canción"      (descarga de LRCLIB)
+  lyric --buscar "Artista" "Canción" --guardar cancion.lrc
+  lyric ejemplo.lrc --audio cancion.mp3   (reproduce la música a la vez)
+  lyric ejemplo.lrc --desfase 0.3         (la letra sale 0,3 s más tarde)
 
 Durante la canción:
   Espacio   pulsar justo cuando empieza a cantar una línea: la letra se sincroniza ahí

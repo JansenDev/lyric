@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lyric"
+version = "2.0.0"
+description = "Letras sincronizadas (LRC) en la consola, estilo Spotify, con reproducción de audio"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = ["pygame"]
+
+[project.scripts]
+lyric = "letras_sync:main"
+
+[tool.setuptools]
+py-modules = ["letras_sync"]
