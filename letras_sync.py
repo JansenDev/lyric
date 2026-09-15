@@ -238,9 +238,15 @@ def main():
     except (OSError, ValueError) as e:
         sys.exit(f"Error: {e}")
 
-    _, lineas = parse_lrc(texto)
+    meta, lineas = parse_lrc(texto)
     if not lineas:
         sys.exit("El archivo no tiene líneas con marcas de tiempo.")
+
+    # Título con lo que haya: etiquetas [ar:]/[ti:] del .lrc o lo pasado a --buscar
+    artista, cancion = meta.get("ar"), meta.get("ti")
+    if args.buscar:
+        artista, cancion = artista or args.buscar[0], cancion or args.buscar[1]
+    titulo = " — ".join(x for x in (artista, cancion) if x)
 
     musica = None
     if args.audio:
@@ -263,7 +269,9 @@ def main():
     try:
         # Cuenta atrás: 1, 2, 3 en el mismo sitio, cada número reemplaza al anterior
         if args.modo == "karaoke":
-            print("\033[2J\033[H", end="")  # pantalla limpia: solo se ven los números
+            print("\033[2J\033[H", end="")  # pantalla limpia: título (si hay) y números
+        if titulo:
+            print(f"{VERDE}♫ {titulo}{RESET}\n")
         for n in (1, 2, 3):
             print(f"\r\033[K{VERDE}{n}{RESET}", end="", flush=True)  # \r\033[K borra el anterior
             time.sleep(1)
