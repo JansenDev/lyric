@@ -13,6 +13,7 @@ Uso:
   python letras_sync.py ejemplo.lrc --audio cancion.mp3   (reproduce la música a la vez)
 
 Para --audio hace falta pygame:  pip install pygame
+  (en Ubuntu/WSL:  sudo apt install python3-pygame)
 """
 import argparse
 import json
@@ -23,12 +24,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-
-os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # sin el saludo de pygame
-try:
-    import pygame  # opcional: solo hace falta con --audio
-except ImportError:
-    pygame = None
+import warnings
 
 TIME_TAG = re.compile(r"\[(\d+):(\d+(?:\.\d+)?)\]")
 META_TAG = re.compile(r"^\[(ar|ti|al|by|offset|length):(.*)\]$", re.IGNORECASE)
@@ -164,8 +160,15 @@ def main():
 
     musica = None
     if args.audio:
-        if pygame is None:
-            sys.exit("Para reproducir audio instala pygame:  pip install pygame")
+        # pygame solo se carga si hay audio: sin --audio el script no lo necesita
+        os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # sin el saludo de pygame
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")  # ej. el aviso de AVX2 del pygame de apt
+                import pygame
+        except ImportError:
+            sys.exit("Para reproducir audio instala pygame:  pip install pygame\n"
+                     "  (en Ubuntu/WSL:  sudo apt install python3-pygame)")
         try:
             pygame.mixer.init()
             pygame.mixer.music.load(args.audio)
@@ -175,12 +178,8 @@ def main():
 
     titulo = f"{meta.get('ar', '?')} — {meta.get('ti', '?')}"
     print(f"{VERDE}♫ {titulo}{RESET}")
-    if musica:
-        print("Reproduciendo... (Ctrl+C para salir)")
-    else:
-        # Margen para darle al play en el reproductor externo
-        print("Empieza en 3 segundos... (Ctrl+C para salir)")
-        time.sleep(3)
+    print("Empieza en 3 segundos... (Ctrl+C para salir)")
+    time.sleep(3)
 
     try:
         reloj = None
