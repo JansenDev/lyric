@@ -37,7 +37,8 @@ META_TAG = re.compile(r"^\[(ar|ti|al|by|offset|length):(.*)\]$", re.IGNORECASE)
 
 GRIS, BLANCO, VERDE, RESET = "\033[90m", "\033[1;97m", "\033[92m", "\033[0m"
 
-PASO = 0.1  # segundos que mueve cada pulsación de ← / →
+PASO = 0.1   # segundos que mueve cada pulsación de ← / →
+AVISO = 2.0  # segundos que se ve el desfase en pantalla después de ajustarlo
 
 
 def parse_lrc(texto):
@@ -164,6 +165,7 @@ def reproducir(lineas, modo="karaoke", inicio=0.0, reloj=None, desfase=0.0):
         reloj = lambda: time.monotonic() - t0
     idx = next((i for i, (t, _) in enumerate(lineas) if t >= inicio), len(lineas))
     desfase_inicial = desfase
+    aviso_hasta, con_aviso = 0.0, False  # desfase visible un momento tras ajustarlo
 
     try:
         with Teclado() as teclado:
@@ -182,9 +184,13 @@ def reproducir(lineas, modo="karaoke", inicio=0.0, reloj=None, desfase=0.0):
                 while nuevo < len(lineas) and lineas[nuevo][0] + desfase <= ahora:
                     nuevo += 1
                 if modo == "karaoke":
-                    if nuevo > idx or desfase != antes:
-                        pie = f"[Espacio] al empezar a cantar · [←/→] ±{PASO} s · desfase {desfase:+.2f} s"
-                        dibujar(lineas, nuevo - 1, pie=pie)
+                    if desfase != antes:
+                        aviso_hasta = time.monotonic() + AVISO
+                    aviso = time.monotonic() < aviso_hasta
+                    # Se redibuja al cambiar de línea, al ajustar y cuando se quita el aviso
+                    if nuevo > idx or desfase != antes or aviso != con_aviso:
+                        dibujar(lineas, nuevo - 1, pie=f"desfase {desfase:+.2f} s" if aviso else "")
+                        con_aviso = aviso
                 else:
                     if desfase != antes:
                         print(f"{GRIS}  (desfase {desfase:+.2f} s){RESET}", flush=True)
@@ -232,7 +238,7 @@ def main():
     except (OSError, ValueError) as e:
         sys.exit(f"Error: {e}")
 
-    meta, lineas = parse_lrc(texto)
+    _, lineas = parse_lrc(texto)
     if not lineas:
         sys.exit("El archivo no tiene líneas con marcas de tiempo.")
 
@@ -254,14 +260,15 @@ def main():
             sys.exit(f"Error al cargar el audio: {e}")
         musica = pygame.mixer.music
 
-    titulo = f"{meta.get('ar', '?')} — {meta.get('ti', '?')}"
-    print(f"{VERDE}♫ {titulo}{RESET}")
-    print("Empieza en 3 segundos... (Ctrl+C para salir)")
-    print(f"{GRIS}Si se desincroniza: [Espacio] justo cuando empiece a cantar una línea, "
-          f"[←/→] para afinar{RESET}")
-    time.sleep(3)
-
     try:
+        # Cuenta atrás: 1, 2, 3 en el mismo sitio, cada número reemplaza al anterior
+        if args.modo == "karaoke":
+            print("\033[2J\033[H", end="")  # pantalla limpia: solo se ven los números
+        for n in (1, 2, 3):
+            print(f"\r\033[K{VERDE}{n}{RESET}", end="", flush=True)  # \r\033[K borra el anterior
+            time.sleep(1)
+        print("\r\033[K", end="", flush=True)  # quita el 3 antes de la primera línea
+
         reloj = None
         if musica:
             musica.play(start=args.inicio)
