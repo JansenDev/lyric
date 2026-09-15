@@ -1,10 +1,10 @@
 # Instala el comando `lyric` en Windows para el usuario actual (sin administrador).
 #   Desde una copia del repositorio:  powershell -ExecutionPolicy Bypass -File install.ps1
-#   Directo desde GitHub:             irm https://raw.githubusercontent.com/USUARIO/lyric/main/install.ps1 | iex
+#   Directo desde GitHub:             irm https://raw.githubusercontent.com/JansenDev/lyric/main/install.ps1 | iex
 # Mensajes sin tildes a proposito: PowerShell 5.1 lee los .ps1 sin BOM como ANSI.
 $ErrorActionPreference = "Stop"
 
-$Repo = "https://github.com/USUARIO/lyric"
+$Repo = "https://github.com/JansenDev/lyric"
 $Destino = Join-Path $env:LOCALAPPDATA "lyric"
 $Bin = Join-Path $env:USERPROFILE ".local\bin"
 

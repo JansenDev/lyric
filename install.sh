@@ -1,10 +1,10 @@
 #!/bin/sh
 # Instala el comando `lyric` para el usuario actual, sin sudo (Linux, macOS y WSL).
 #   Desde una copia del repositorio:  ./install.sh
-#   Directo desde GitHub:             curl -fsSL https://raw.githubusercontent.com/USUARIO/lyric/main/install.sh | sh
+#   Directo desde GitHub:             curl -fsSL https://raw.githubusercontent.com/JansenDev/lyric/main/install.sh | sh
 set -e
 
-REPO="https://github.com/USUARIO/lyric"
+REPO="https://github.com/JansenDev/lyric"
 DESTINO="${XDG_DATA_HOME:-$HOME/.local/share}/lyric"
 BIN="$HOME/.local/bin"
 

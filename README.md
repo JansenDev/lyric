@@ -19,13 +19,13 @@ y deja el comando `lyric` disponible en cualquier consola, sin sudo ni permisos 
 **Linux, macOS y WSL**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/USUARIO/lyric/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/JansenDev/lyric/main/install.sh | sh
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-irm https://raw.githubusercontent.com/USUARIO/lyric/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/JansenDev/lyric/main/install.ps1 | iex
 ```
 
 También puedes clonar el repositorio y ejecutar `./install.sh` o
