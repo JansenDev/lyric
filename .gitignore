@@ -1,0 +1,13 @@
+# Audio de las canciones: no se sube al repositorio
+*.mp3
+*.ogg
+*.wav
+
+# Letras de canciones: suelen tener derechos de autor, se quedan en local
+*.lrc
+!ejemplo.lrc
+
+# Generados por Python y por la instalación
+__pycache__/
+*.egg-info/
+build/
